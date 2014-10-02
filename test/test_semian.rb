@@ -185,7 +185,11 @@ class TestSemian < Test::Unit::TestCase
     semid = Semian[:testing].semid
     `ipcs -s `.lines.each do |line|
       if /\s#{semid}\s/.match(line)
-        assert_equal '600', line.split[3]
+        if RUBY_PLATFORM =~ /darwin/i
+          assert_equal '--ra-------', line.split[3]
+        else
+          assert_equal '600', line.split[3]
+        end
       end
     end
 
@@ -193,7 +197,11 @@ class TestSemian < Test::Unit::TestCase
     semid = Semian[:testing].semid
     `ipcs -s `.lines.each do |line|
       if /\s#{semid}\s/.match(line)
-        assert_equal '660', line.split[3]
+        if RUBY_PLATFORM =~ /darwin/i
+          assert_equal '--ra-ra----', line.split[3]
+        else
+          assert_equal '660', line.split[3]
+        end
       end
     end
   end

@@ -12,13 +12,9 @@
 
 #include <stdio.h>
 
-union semun {
-  int              val;    /* Value for SETVAL */
-  struct semid_ds *buf;    /* Buffer for IPC_STAT, IPC_SET */
-  unsigned short  *array;  /* Array for GETALL, SETALL */
-  struct seminfo  *__buf;  /* Buffer for IPC_INFO
-                             (Linux-specific) */
-};
+#if defined(__linux__)
+#define SEMTIMEDOP_EXISTS 1
+#endif
 
 #if defined(HAVE_RB_THREAD_CALL_WITHOUT_GVL) && defined(HAVE_RUBY_THREAD_H)
 // 2.0
@@ -28,6 +24,43 @@ union semun {
  // 1.9
 typedef VALUE (*my_blocking_fn_t)(void*);
 #define WITHOUT_GVL(fn,a,ubf,b) rb_thread_blocking_region((my_blocking_fn_t)(fn),(a),(ubf),(b))
+#endif
+
+#ifdef SEMTIMEDOP_EXISTS
+union semun {
+  int              val;    /* Value for SETVAL */
+  struct semid_ds *buf;    /* Buffer for IPC_STAT, IPC_SET */
+  unsigned short  *array;  /* Array for GETALL, SETALL */
+  struct seminfo  *__buf;  /* Buffer for IPC_INFO
+                             (Linux-specific) */
+};
+#else
+volatile int alarm_triggered = 0;
+void alarm_handler(int sig)
+{
+    alarm_triggered = 1;
+}
+
+int
+semtimedop(int semid, struct sembuf *sops, unsigned nsops, struct timespec *timeout)
+{
+  int code;
+
+  signal(SIGALRM, alarm_handler);
+
+  alarm(timeout->tv_sec || 1);
+  code = semop(semid, sops, nsops);
+  alarm(0);
+
+  if (code == -1 && errno == EINTR && alarm_triggered) {
+    alarm_triggered = 0;
+    errno = EAGAIN;
+    return code;
+  }
+
+  alarm_triggered = 0;
+  return code;
+}
 #endif
 
 static ID id_timeout;
